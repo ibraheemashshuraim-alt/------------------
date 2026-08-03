@@ -65,8 +65,9 @@ export default function EntryScreen({ onStart }: EntryScreenProps) {
         onStart(data);
       }
     } catch (err: any) {
-      console.error(err);
-      setError("کوئی مسئلہ پیش آیا ہے۔ براہ کرم دوبارہ کوشش کریں۔");
+      console.error("Supabase Error:", err);
+      // Display the actual error message for debugging
+      setError(err?.message ? `مسئلہ پیش آیا: ${err.message}` : "کوئی مسئلہ پیش آیا ہے۔ براہ کرم دوبارہ کوشش کریں۔");
     } finally {
       setLoading(false);
     }
