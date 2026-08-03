@@ -46,14 +46,19 @@ export default function ResultScreen({ score, total, studentName }: ResultScreen
     giftIcon = <Crown className="w-16 h-16 text-yellow-500" />;
     giftBg = "bg-yellow-100 border-yellow-300";
     giftText = "👑 سونے کا تاج";
+  } else if (score >= 25) {
+    feedback = "زبردست! آپ کی کارکردگی شاندار رہی۔";
+    giftIcon = <Trophy className="w-16 h-16 text-yellow-500" />;
+    giftBg = "bg-yellow-50 border-yellow-200";
+    giftText = "🏆 گولڈ ٹرافی";
   } else if (score >= 20) {
-    feedback = "بہت خوب! آپ کی کارکردگی شاندار رہی۔";
+    feedback = "بہت خوب! آپ کی کارکردگی اچھی رہی۔";
     giftIcon = <Medal className="w-16 h-16 text-slate-400" />;
     giftBg = "bg-slate-100 border-slate-300";
     giftText = "🥈 سلور میڈل";
   } else if (score >= 10) {
     feedback = "اچھی کوشش! مزید پریکٹس کریں تو آپ بہتر ہو سکتے ہیں۔";
-    giftIcon = <Trophy className="w-16 h-16 text-amber-700" />;
+    giftIcon = <Medal className="w-16 h-16 text-amber-700" />;
     giftBg = "bg-amber-100 border-amber-300";
     giftText = "🥉 برانز میڈل";
   } else {

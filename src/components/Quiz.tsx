@@ -87,27 +87,16 @@ export default function Quiz({ student, onComplete }: QuizProps) {
         audioRef.current.pause();
       }
       
-      // Try Speech Synthesis First
-      if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'ur-PK'; // Urdu
-        utterance.rate = 0.9;
-        
-        // If it starts playing, we're good. If not or no voice available, it might fallback
-        window.speechSynthesis.speak(utterance);
-      } else {
-        // Fallback to Google TTS
-        const url = `https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=ur&q=${encodeURIComponent(text)}`;
-        const audio = new Audio(url);
-        audioRef.current = audio;
-        
-        const playPromise = audio.play();
-        if (playPromise !== undefined) {
-          playPromise.catch(error => {
-            console.error("Audio playback blocked.", error);
-          });
-        }
+      // Force Google TTS as speechSynthesis might fail silently on some devices
+      const url = `https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=ur&q=${encodeURIComponent(text)}`;
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(error => {
+          console.error("Audio playback blocked.", error);
+        });
       }
     } catch (e) {
       console.error("Voice Error:", e);
@@ -138,6 +127,7 @@ export default function Quiz({ student, onComplete }: QuizProps) {
       
       let gift = "🎈";
       if (newScore === questions.length) gift = "👑";
+      else if (newScore >= 25) gift = "🏆";
       else if (newScore >= 20) gift = "🥈";
       else if (newScore >= 10) gift = "🥉";
 
@@ -157,7 +147,7 @@ export default function Quiz({ student, onComplete }: QuizProps) {
           console.error("Failed to save score:", err);
           setSaving(false);
         }
-      }, 3500);
+      }, 1500); // reduced from 3500 to 1500 for faster result generation
     }
   };
 

@@ -65,6 +65,24 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleDeleteSingle = async (id: string, name: string) => {
+    const confirm = window.confirm(`کیا آپ واقعی ${name} کا ریکارڈ ڈیلیٹ کرنا چاہتے ہیں؟`);
+    if (!confirm) return;
+
+    try {
+      const { error } = await supabase
+        .from("students")
+        .delete()
+        .eq("id", id);
+      
+      if (error) throw error;
+      fetchStudents();
+    } catch (err) {
+      console.error(err);
+      alert("ریکارڈ ڈیلیٹ کرنے میں مسئلہ ہے۔");
+    }
+  };
+
   const handleDeleteAll = async () => {
     const confirm1 = window.confirm("کیا آپ واقعی تمام طلباء کا ڈیٹا ڈیلیٹ کرنا چاہتے ہیں؟ یہ عمل واپس نہیں ہو سکتا!");
     if (!confirm1) return;
@@ -74,7 +92,6 @@ export default function AdminDashboard() {
 
     setDeleting(true);
     try {
-      // In Supabase, you must have a filter to delete multiple rows. We filter by score >= 0 which covers everyone.
       const { error } = await supabase
         .from("students")
         .delete()
@@ -82,7 +99,6 @@ export default function AdminDashboard() {
       
       if (error) throw error;
       
-      // Try deleting null scores as well just in case
       await supabase.from("students").delete().is('score', null);
 
       alert("تمام ڈیٹا کامیابی سے ڈیلیٹ کر دیا گیا ہے۔");
@@ -204,14 +220,23 @@ export default function AdminDashboard() {
                       <td className="px-6 py-4 font-black text-brand-600 font-sans text-xl">{student.score || 0}</td>
                       <td className="px-6 py-4 text-2xl">{student.gift || '-'}</td>
                       <td className="px-6 py-4 text-left">
-                        <button
-                          onClick={() => handleAllowAgain(student)}
-                          disabled={!student.has_played}
-                          className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg text-sm transition-colors urdu-text disabled:opacity-50 disabled:cursor-not-allowed touch-target font-bold border border-indigo-200 flex items-center gap-2 mr-auto"
-                        >
-                          <PlusCircle className="w-4 h-4" />
-                          دوبارہ اجازت دیں
-                        </button>
+                        <div className="flex items-center gap-2 justify-end">
+                          <button
+                            onClick={() => handleDeleteSingle(student.id, student.name)}
+                            className="px-3 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors touch-target border border-red-200"
+                            title="ڈیلیٹ کریں"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleAllowAgain(student)}
+                            disabled={!student.has_played}
+                            className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg text-sm transition-colors urdu-text disabled:opacity-50 disabled:cursor-not-allowed touch-target font-bold border border-indigo-200 flex items-center gap-2"
+                          >
+                            <PlusCircle className="w-4 h-4" />
+                            دوبارہ اجازت دیں
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
