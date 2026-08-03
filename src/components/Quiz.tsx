@@ -18,42 +18,25 @@ export default function Quiz({ student, onComplete }: QuizProps) {
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
-  const [voicesLoaded, setVoicesLoaded] = useState(false);
 
   useEffect(() => {
+    // Shuffle and pick 10 questions
     const shuffled = [...idiomsData].sort(() => Math.random() - 0.5).slice(0, 10);
     setQuestions(shuffled);
-
-    // Preload voices
-    const loadVoices = () => {
-      window.speechSynthesis.getVoices();
-      setVoicesLoaded(true);
-    };
-    loadVoices();
-    if (speechSynthesis.onvoiceschanged !== undefined) {
-      speechSynthesis.onvoiceschanged = loadVoices;
-    }
   }, []);
 
   const speakText = (text: string) => {
-    if ("speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      
-      const voices = window.speechSynthesis.getVoices();
-      // Fallback to Hindi or Arabic if Urdu is not installed, as Hindi sounds identical for basic phrases
-      const preferredVoice = voices.find(v => v.lang.includes('ur')) 
-                          || voices.find(v => v.lang.includes('hi'))
-                          || voices.find(v => v.lang.includes('ar'));
-      
-      if (preferredVoice) {
-        utterance.voice = preferredVoice;
-      } else {
+    try {
+      if ("speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = "ur-PK";
+        
+        // Simple fallback if ur-PK fails on some devices, just try to speak
+        window.speechSynthesis.speak(utterance);
       }
-
-      utterance.rate = 0.9; // Slightly slower for clarity
-      window.speechSynthesis.speak(utterance);
+    } catch (e) {
+      console.error("TTS Error:", e);
     }
   };
 
@@ -81,15 +64,16 @@ export default function Quiz({ student, onComplete }: QuizProps) {
     } else {
       setSaving(true);
       try {
+        // BUG FIX: Score was already incremented in handleOptionSelect, so we don't add it again here.
         await supabase
           .from("students")
           .update({ 
-            score: score + (isCorrect ? 1 : 0), 
+            score: score, 
             has_played: true 
           })
           .eq("id", student.id);
         
-        onComplete(score + (isCorrect ? 1 : 0), questions.length);
+        onComplete(score, questions.length);
       } catch (err) {
         console.error("Failed to save score:", err);
       } finally {
@@ -100,10 +84,10 @@ export default function Quiz({ student, onComplete }: QuizProps) {
 
   if (questions.length === 0 || saving) {
     return (
-      <div className="flex items-center justify-center min-h-[80vh]">
-        <div className="glass-card p-12 flex flex-col items-center">
-          <Loader2 className="w-16 h-16 animate-spin text-brand-500 mb-4" />
-          <p className="urdu-text text-xl text-slate-700">براہ کرم انتظار کریں...</p>
+      <div className="flex items-center justify-center min-h-[70vh]">
+        <div className="glass-card p-10 flex flex-col items-center">
+          <Loader2 className="w-12 h-12 animate-spin text-brand-500 mb-4" />
+          <p className="urdu-text text-lg text-slate-700">براہ کرم انتظار کریں...</p>
         </div>
       </div>
     );
@@ -112,14 +96,15 @@ export default function Quiz({ student, onComplete }: QuizProps) {
   const currentQuestion = questions[currentIndex];
 
   return (
-    <div className="max-w-5xl mx-auto p-4 flex flex-col min-h-[85vh]">
-      {/* Header */}
-      <div className="flex justify-between items-center glass-card px-8 py-5 mb-8 sticky top-4 z-10 border-b-4 border-brand-500">
-        <div className="urdu-text text-2xl font-bold text-slate-700 flex items-center gap-3">
-          <span className="bg-slate-100 px-4 py-2 rounded-xl border border-slate-200">سوال: {currentIndex + 1} / {questions.length}</span>
+    <div className="max-w-4xl mx-auto p-2 md:p-4 flex flex-col items-center justify-center min-h-[80vh]">
+      
+      {/* Header - Made non-sticky to avoid overlapping */}
+      <div className="w-full flex justify-between items-center bg-white/70 backdrop-blur-md rounded-2xl px-6 py-4 mb-6 shadow-sm border border-slate-200">
+        <div className="urdu-text text-xl font-bold text-slate-700">
+          سوال: {currentIndex + 1} / {questions.length}
         </div>
-        <div className="urdu-text text-2xl font-bold flex items-center gap-3">
-          <span className="bg-brand-50 text-brand-700 px-4 py-2 rounded-xl border border-brand-200">اسکور: {score}</span>
+        <div className="urdu-text text-xl font-bold text-brand-600">
+          اسکور: {score}
         </div>
       </div>
 
@@ -127,21 +112,20 @@ export default function Quiz({ student, onComplete }: QuizProps) {
       <AnimatePresence mode="wait">
         <motion.div
           key={currentIndex}
-          initial={{ x: 50, opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          exit={{ x: -50, opacity: 0 }}
-          className="flex-grow flex flex-col justify-center w-full"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 1.05 }}
+          transition={{ duration: 0.3 }}
+          className="w-full flex flex-col items-center bg-white/90 backdrop-blur-xl rounded-3xl p-6 md:p-10 shadow-lg border border-slate-200"
         >
-          <div className="relative bg-gradient-to-br from-brand-600 to-brand-800 rounded-3xl p-10 md:p-16 mb-10 text-center shadow-2xl shadow-brand-900/20 border border-brand-400/30">
-            <div className="absolute top-4 left-4 opacity-20">
-              <Volume2 className="w-12 h-12 text-white" />
-            </div>
-            <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white urdu-text leading-[2.5] tracking-wide drop-shadow-lg">
+          {/* Question Text */}
+          <div className="text-center w-full mb-8 relative">
+            <h2 className="text-2xl md:text-4xl font-bold text-slate-800 urdu-text leading-loose tracking-wide">
               {currentQuestion.sentence.split('_________').map((part: string, i: number, arr: any[]) => (
                 <span key={i}>
                   {part}
                   {i < arr.length - 1 && (
-                    <span className="inline-block mx-4 w-32 md:w-48 border-b-4 border-dashed border-white/70"></span>
+                    <span className="inline-block mx-2 w-20 md:w-32 border-b-2 border-slate-400"></span>
                   )}
                 </span>
               ))}
@@ -149,33 +133,34 @@ export default function Quiz({ student, onComplete }: QuizProps) {
           </div>
 
           {/* Options Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl mx-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
             {currentQuestion.options.map((option: string, index: number) => {
-              let buttonStyle = "bg-white text-slate-800 hover:bg-brand-50 hover:border-brand-300 hover:shadow-md border-slate-200";
+              let buttonStyle = "bg-slate-50 text-slate-700 hover:bg-slate-100 hover:shadow-md border-slate-200";
               let animation = {};
 
               if (selectedOption === index) {
                 if (isCorrect) {
-                  buttonStyle = "bg-gradient-to-r from-green-500 to-green-600 text-white border-green-500 shadow-xl shadow-green-500/30 scale-[1.02]";
-                  animation = { scale: [1, 1.05, 1] };
+                  buttonStyle = "bg-green-500 text-white border-green-600 shadow-lg shadow-green-500/30";
+                  animation = { scale: [1, 1.03, 1] };
                 } else {
-                  buttonStyle = "bg-gradient-to-r from-red-500 to-red-600 text-white border-red-500 shadow-xl shadow-red-500/30";
-                  animation = { x: [-10, 10, -10, 10, 0] };
+                  buttonStyle = "bg-red-500 text-white border-red-600 shadow-lg shadow-red-500/30";
+                  animation = { x: [-8, 8, -8, 8, 0] };
                 }
               } else if (selectedOption !== null && index === currentQuestion.correctIndex) {
-                buttonStyle = "bg-green-50 text-green-800 border-green-400 border-dashed opacity-80";
+                // Highlight the correct answer slightly if user got it wrong
+                buttonStyle = "bg-green-50 text-green-700 border-green-300";
               } else if (selectedOption !== null) {
-                buttonStyle = "bg-slate-50 text-slate-400 border-slate-200 opacity-50";
+                buttonStyle = "bg-slate-50 text-slate-400 border-slate-100 opacity-60";
               }
 
               return (
                 <motion.button
                   key={index}
                   animate={selectedOption === index ? animation : {}}
-                  transition={{ duration: 0.4 }}
+                  transition={{ duration: 0.3 }}
                   onClick={() => handleOptionSelect(index)}
                   disabled={selectedOption !== null}
-                  className={`touch-target px-8 py-8 rounded-2xl border-2 text-3xl font-bold urdu-text transition-all duration-300 ${buttonStyle} disabled:cursor-default flex items-center justify-center min-h-[120px]`}
+                  className={`touch-target p-4 md:p-6 rounded-2xl border-2 text-xl md:text-2xl font-bold urdu-text transition-all duration-200 flex items-center justify-center min-h-[80px] ${buttonStyle} disabled:cursor-default`}
                 >
                   {option}
                 </motion.button>
@@ -186,16 +171,16 @@ export default function Quiz({ student, onComplete }: QuizProps) {
           {/* Next Button */}
           {selectedOption !== null && (
             <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mt-12 flex justify-center w-full"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="mt-8 w-full flex justify-center overflow-hidden"
             >
               <button
                 onClick={handleNext}
-                className="bg-slate-800 hover:bg-slate-900 text-white px-10 py-5 rounded-2xl text-2xl font-bold urdu-text flex items-center gap-4 transition-all shadow-xl hover:shadow-2xl active:scale-95"
+                className="bg-slate-800 hover:bg-slate-900 text-white px-8 py-3 rounded-xl text-xl font-bold urdu-text flex items-center gap-3 transition-all shadow-lg active:scale-95"
               >
                 <span>اگلا سوال</span>
-                <ArrowLeft className="w-8 h-8" />
+                <ArrowLeft className="w-6 h-6" />
               </button>
             </motion.div>
           )}
