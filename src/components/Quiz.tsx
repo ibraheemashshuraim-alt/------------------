@@ -87,8 +87,8 @@ export default function Quiz({ student, onComplete }: QuizProps) {
         audioRef.current.pause();
       }
       
-      // Force Google TTS as speechSynthesis might fail silently on some devices
-      const url = `https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=ur&q=${encodeURIComponent(text)}`;
+      // Use our backend proxy to avoid CORS and ad-blocker issues on mobile devices
+      const url = `/api/tts?text=${encodeURIComponent(text)}`;
       const audio = new Audio(url);
       audioRef.current = audio;
       
