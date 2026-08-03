@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import idiomsData from "@/data/idioms.json";
-import { Loader2, ArrowLeft, Volume2 } from "lucide-react";
+import { Loader2, ArrowLeft, Volume2, Star } from "lucide-react";
 
 interface QuizProps {
   student: any;
@@ -22,21 +22,38 @@ export default function Quiz({ student, onComplete }: QuizProps) {
   useEffect(() => {
     // Shuffle and pick 10 questions
     const shuffled = [...idiomsData].sort(() => Math.random() - 0.5).slice(0, 10);
-    setQuestions(shuffled);
+    
+    // Shuffle options for each question so correct answer is not always first
+    const processedQuestions = shuffled.map((q) => {
+      const optionsMapped = q.options.map((opt: string, idx: number) => ({
+        text: opt,
+        isCorrect: idx === q.correctIndex
+      }));
+      // Shuffle the options array
+      const shuffledOptions = optionsMapped.sort(() => Math.random() - 0.5);
+      return { ...q, shuffledOptions };
+    });
+
+    setQuestions(processedQuestions);
   }, []);
 
-  const speakText = (text: string) => {
+  const playVoice = (text: string) => {
     try {
-      if ("speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = "ur-PK";
-        
-        // Simple fallback if ur-PK fails on some devices, just try to speak
-        window.speechSynthesis.speak(utterance);
-      }
+      // Using Google Translate TTS via HTML5 Audio (bypasses most browser TTS limitations)
+      const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=ur&client=tw-ob`;
+      const audio = new Audio(url);
+      audio.play().catch((e) => {
+        console.error("Audio playback failed, falling back to SpeechSynthesis:", e);
+        // Fallback
+        if ("speechSynthesis" in window) {
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(text);
+          utterance.lang = "ur-PK";
+          window.speechSynthesis.speak(utterance);
+        }
+      });
     } catch (e) {
-      console.error("TTS Error:", e);
+      console.error("Voice Error:", e);
     }
   };
 
@@ -45,14 +62,14 @@ export default function Quiz({ student, onComplete }: QuizProps) {
 
     setSelectedOption(index);
     const question = questions[currentIndex];
-    const correct = index === question.correctIndex;
+    const correct = question.shuffledOptions[index].isCorrect;
     setIsCorrect(correct);
 
     if (correct) {
       setScore((prev) => prev + 1);
-      speakText(question.fullAudioText);
+      playVoice(question.fullAudioText);
     } else {
-      speakText("غلط جواب");
+      playVoice("غلط جواب");
     }
   };
 
@@ -64,7 +81,6 @@ export default function Quiz({ student, onComplete }: QuizProps) {
     } else {
       setSaving(true);
       try {
-        // BUG FIX: Score was already incremented in handleOptionSelect, so we don't add it again here.
         await supabase
           .from("students")
           .update({ 
@@ -85,9 +101,9 @@ export default function Quiz({ student, onComplete }: QuizProps) {
   if (questions.length === 0 || saving) {
     return (
       <div className="flex items-center justify-center min-h-[70vh]">
-        <div className="glass-card p-10 flex flex-col items-center">
-          <Loader2 className="w-12 h-12 animate-spin text-brand-500 mb-4" />
-          <p className="urdu-text text-lg text-slate-700">براہ کرم انتظار کریں...</p>
+        <div className="bg-white/80 rounded-3xl p-10 flex flex-col items-center border-b-8 border-brand-200">
+          <Loader2 className="w-16 h-16 animate-spin text-brand-500 mb-4" />
+          <p className="urdu-text text-xl text-slate-700 font-bold">براہ کرم انتظار کریں... ⏳</p>
         </div>
       </div>
     );
@@ -98,13 +114,15 @@ export default function Quiz({ student, onComplete }: QuizProps) {
   return (
     <div className="max-w-4xl mx-auto p-2 md:p-4 flex flex-col items-center justify-center min-h-[80vh]">
       
-      {/* Header - Made non-sticky to avoid overlapping */}
-      <div className="w-full flex justify-between items-center bg-white/70 backdrop-blur-md rounded-2xl px-6 py-4 mb-6 shadow-sm border border-slate-200">
-        <div className="urdu-text text-xl font-bold text-slate-700">
-          سوال: {currentIndex + 1} / {questions.length}
+      {/* Header - Playful & Kid Friendly */}
+      <div className="w-full flex justify-between items-center bg-white/90 rounded-3xl px-6 py-4 mb-6 shadow-sm border-b-4 border-slate-200">
+        <div className="urdu-text text-xl font-bold text-indigo-600 flex items-center gap-2">
+          <span>🎯 سوال:</span>
+          <span className="bg-indigo-100 px-3 py-1 rounded-xl">{currentIndex + 1} / {questions.length}</span>
         </div>
-        <div className="urdu-text text-xl font-bold text-brand-600">
-          اسکور: {score}
+        <div className="urdu-text text-xl font-bold text-amber-500 flex items-center gap-2">
+          <span>⭐ اسکور:</span>
+          <span className="bg-amber-100 px-3 py-1 rounded-xl text-amber-600">{score}</span>
         </div>
       </div>
 
@@ -112,20 +130,23 @@ export default function Quiz({ student, onComplete }: QuizProps) {
       <AnimatePresence mode="wait">
         <motion.div
           key={currentIndex}
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 1.05 }}
-          transition={{ duration: 0.3 }}
-          className="w-full flex flex-col items-center bg-white/90 backdrop-blur-xl rounded-3xl p-6 md:p-10 shadow-lg border border-slate-200"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, x: -50 }}
+          transition={{ duration: 0.3, type: "spring", bounce: 0.4 }}
+          className="w-full flex flex-col items-center bg-white rounded-[2rem] p-6 md:p-10 shadow-xl border-b-8 border-slate-200"
         >
           {/* Question Text */}
-          <div className="text-center w-full mb-8 relative">
-            <h2 className="text-2xl md:text-4xl font-bold text-slate-800 urdu-text leading-loose tracking-wide">
+          <div className="text-center w-full mb-8 relative bg-sky-50 rounded-3xl p-8 border-2 border-sky-100">
+            <div className="absolute -top-6 -left-2 bg-yellow-300 rounded-full p-3 shadow-sm transform -rotate-12">
+              <Volume2 className="w-8 h-8 text-yellow-800" />
+            </div>
+            <h2 className="text-3xl md:text-4xl font-bold text-slate-800 urdu-text leading-loose tracking-wide">
               {currentQuestion.sentence.split('_________').map((part: string, i: number, arr: any[]) => (
                 <span key={i}>
                   {part}
                   {i < arr.length - 1 && (
-                    <span className="inline-block mx-2 w-20 md:w-32 border-b-2 border-slate-400"></span>
+                    <span className="inline-block mx-2 w-20 md:w-32 border-b-4 border-slate-400 border-dotted"></span>
                   )}
                 </span>
               ))}
@@ -134,23 +155,24 @@ export default function Quiz({ student, onComplete }: QuizProps) {
 
           {/* Options Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
-            {currentQuestion.options.map((option: string, index: number) => {
-              let buttonStyle = "bg-slate-50 text-slate-700 hover:bg-slate-100 hover:shadow-md border-slate-200";
+            {currentQuestion.shuffledOptions.map((option: any, index: number) => {
+              let buttonStyle = "bg-white text-slate-700 hover:bg-indigo-50 hover:border-indigo-200 border-slate-200 border-b-4";
               let animation = {};
 
               if (selectedOption === index) {
                 if (isCorrect) {
-                  buttonStyle = "bg-green-500 text-white border-green-600 shadow-lg shadow-green-500/30";
-                  animation = { scale: [1, 1.03, 1] };
+                  buttonStyle = "bg-green-500 text-white border-green-700 border-b-0 translate-y-1 shadow-inner";
+                  animation = { scale: [1, 1.05, 1] };
                 } else {
-                  buttonStyle = "bg-red-500 text-white border-red-600 shadow-lg shadow-red-500/30";
+                  buttonStyle = "bg-red-500 text-white border-red-700 border-b-0 translate-y-1 shadow-inner";
                   animation = { x: [-8, 8, -8, 8, 0] };
                 }
-              } else if (selectedOption !== null && index === currentQuestion.correctIndex) {
-                // Highlight the correct answer slightly if user got it wrong
-                buttonStyle = "bg-green-50 text-green-700 border-green-300";
+              } else if (selectedOption !== null && option.isCorrect) {
+                // Highlight correct answer
+                buttonStyle = "bg-green-100 text-green-800 border-green-300 border-b-4 border-dashed";
               } else if (selectedOption !== null) {
-                buttonStyle = "bg-slate-50 text-slate-400 border-slate-100 opacity-60";
+                // Dim other options
+                buttonStyle = "bg-slate-50 text-slate-400 border-slate-100 border-b-2 opacity-60";
               }
 
               return (
@@ -160,9 +182,9 @@ export default function Quiz({ student, onComplete }: QuizProps) {
                   transition={{ duration: 0.3 }}
                   onClick={() => handleOptionSelect(index)}
                   disabled={selectedOption !== null}
-                  className={`touch-target p-4 md:p-6 rounded-2xl border-2 text-xl md:text-2xl font-bold urdu-text transition-all duration-200 flex items-center justify-center min-h-[80px] ${buttonStyle} disabled:cursor-default`}
+                  className={`touch-target p-4 md:p-6 rounded-2xl border-2 text-2xl font-bold urdu-text transition-all duration-200 flex items-center justify-center min-h-[90px] ${buttonStyle} disabled:cursor-default active:border-b-0 active:translate-y-1`}
                 >
-                  {option}
+                  {option.text}
                 </motion.button>
               );
             })}
@@ -171,16 +193,16 @@ export default function Quiz({ student, onComplete }: QuizProps) {
           {/* Next Button */}
           {selectedOption !== null && (
             <motion.div 
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              className="mt-8 w-full flex justify-center overflow-hidden"
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="mt-8 w-full flex justify-center"
             >
               <button
                 onClick={handleNext}
-                className="bg-slate-800 hover:bg-slate-900 text-white px-8 py-3 rounded-xl text-xl font-bold urdu-text flex items-center gap-3 transition-all shadow-lg active:scale-95"
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-10 py-4 rounded-2xl text-2xl font-bold urdu-text flex items-center gap-3 transition-all shadow-[0_6px_0_rgb(67,56,202)] hover:translate-y-1 hover:shadow-[0_4px_0_rgb(67,56,202)] active:translate-y-2 active:shadow-none"
               >
                 <span>اگلا سوال</span>
-                <ArrowLeft className="w-6 h-6" />
+                <ArrowLeft className="w-8 h-8" />
               </button>
             </motion.div>
           )}
