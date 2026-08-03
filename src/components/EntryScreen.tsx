@@ -27,14 +27,16 @@ export default function EntryScreen({ onStart }: EntryScreenProps) {
     setError("");
 
     try {
-      // Check if student exists
+      // Fetch the most recent record for this email
       const { data: existingStudent, error: fetchError } = await supabase
         .from("students")
         .select("*")
         .eq("email", email.trim().toLowerCase())
-        .single();
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-      if (fetchError && fetchError.code !== "PGRST116") { // PGRST116 is "Not Found"
+      if (fetchError) {
         throw fetchError;
       }
 

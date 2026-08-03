@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import idiomsData from "@/data/idioms.json";
-import { Loader2, ArrowLeft, Lightbulb, Trophy } from "lucide-react";
+import { Loader2, ArrowLeft, Lightbulb, Volume2 } from "lucide-react";
 
 interface QuizProps {
   student: any;
@@ -18,6 +18,16 @@ const OPTION_COLORS = [
   "bg-rose-100 hover:bg-rose-200 border-rose-300 text-rose-900"
 ];
 
+// Fisher-Yates shuffle to ensure completely random order without duplicates
+function shuffleArray(array: any[]) {
+  const newArr = [...array];
+  for (let i = newArr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
+  }
+  return newArr;
+}
+
 export default function Quiz({ student, onComplete }: QuizProps) {
   const [questions, setQuestions] = useState<any[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -30,10 +40,10 @@ export default function Quiz({ student, onComplete }: QuizProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    // Separate idioms by difficulty
-    const easy = idiomsData.filter(i => i.difficulty === 'easy').sort(() => Math.random() - 0.5).slice(0, 10);
-    const normal = idiomsData.filter(i => i.difficulty === 'normal').sort(() => Math.random() - 0.5).slice(0, 10);
-    const hard = idiomsData.filter(i => i.difficulty === 'hard').sort(() => Math.random() - 0.5).slice(0, 10);
+    // Separate idioms by difficulty and shuffle them properly
+    const easy = shuffleArray(idiomsData.filter(i => i.difficulty === 'easy')).slice(0, 10);
+    const normal = shuffleArray(idiomsData.filter(i => i.difficulty === 'normal')).slice(0, 10);
+    const hard = shuffleArray(idiomsData.filter(i => i.difficulty === 'hard')).slice(0, 10);
     
     // Combine 30 questions
     const combined = [...easy, ...normal, ...hard];
@@ -44,7 +54,7 @@ export default function Quiz({ student, onComplete }: QuizProps) {
         text: opt,
         isCorrect: idx === q.correctIndex
       }));
-      const shuffledOptions = optionsMapped.sort(() => Math.random() - 0.5);
+      const shuffledOptions = shuffleArray(optionsMapped);
       return { ...q, shuffledOptions };
     });
 
@@ -57,20 +67,47 @@ export default function Quiz({ student, onComplete }: QuizProps) {
     return () => clearTimeout(timer);
   }, []);
 
+  const playSfx = (type: 'correct' | 'wrong') => {
+    try {
+      const audio = new Audio(
+        type === 'correct' 
+          ? 'https://cdn.pixabay.com/download/audio/2021/08/04/audio_0625c1539c.mp3?filename=success-1-6297.mp3'
+          : 'https://cdn.pixabay.com/download/audio/2021/08/04/audio_c6ccf3232f.mp3?filename=negative_beeps-6008.mp3'
+      );
+      audio.volume = 0.5;
+      audio.play().catch(e => console.log('SFX block:', e));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const playVoice = (text: string) => {
     try {
       if (audioRef.current) {
         audioRef.current.pause();
       }
-      const url = `https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=ur&q=${encodeURIComponent(text)}`;
-      const audio = new Audio(url);
-      audioRef.current = audio;
       
-      const playPromise = audio.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(error => {
-          console.error("Audio playback blocked by browser. Please interact with the document first.", error);
-        });
+      // Try Speech Synthesis First
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'ur-PK'; // Urdu
+        utterance.rate = 0.9;
+        
+        // If it starts playing, we're good. If not or no voice available, it might fallback
+        window.speechSynthesis.speak(utterance);
+      } else {
+        // Fallback to Google TTS
+        const url = `https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=ur&q=${encodeURIComponent(text)}`;
+        const audio = new Audio(url);
+        audioRef.current = audio;
+        
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(error => {
+            console.error("Audio playback blocked.", error);
+          });
+        }
       }
     } catch (e) {
       console.error("Voice Error:", e);
@@ -88,12 +125,14 @@ export default function Quiz({ student, onComplete }: QuizProps) {
     const newScore = score + (correct ? 1 : 0);
     if (correct) {
       setScore(newScore);
-      playVoice(question.fullAudioText);
+      playSfx('correct');
+      // Slightly delay the voice so SFX can be heard
+      setTimeout(() => playVoice(question.fullAudioText), 600);
     } else {
-      playVoice("غلط جواب");
+      playSfx('wrong');
+      setTimeout(() => playVoice("غلط جواب"), 600);
     }
 
-    // If it's the very last question, don't wait for "Next" button. Wait a bit then finish.
     if (currentIndex === questions.length - 1) {
       setSaving(true);
       
@@ -118,16 +157,14 @@ export default function Quiz({ student, onComplete }: QuizProps) {
           console.error("Failed to save score:", err);
           setSaving(false);
         }
-      }, 2500); // wait for audio to finish playing
+      }, 3500);
     }
   };
 
   const handleNext = async () => {
-    // Next button is not shown on the last question anyway
     if (currentIndex < questions.length - 1) {
       const nextIndex = currentIndex + 1;
       
-      // Check if entering a new level (every 10 questions)
       if (nextIndex === 10) {
         setCurrentLevel(2);
         setShowLevelIntro(true);
@@ -185,13 +222,14 @@ export default function Quiz({ student, onComplete }: QuizProps) {
   }
 
   const currentQuestion = questions[currentIndex];
-  // Determine current level display for header
   const levelDisplay = currentIndex < 10 ? 1 : currentIndex < 20 ? 2 : 3;
+  
+  // Determine if next is a new level
+  const isNextNewLevel = (currentIndex === 9 || currentIndex === 19);
 
   return (
     <div className="max-w-4xl mx-auto p-2 md:p-4 flex flex-col items-center justify-center min-h-[85vh] overflow-hidden">
       
-      {/* Header */}
       <div className="w-full flex justify-between items-center bg-white/95 rounded-full px-6 py-3 mb-6 shadow-md border border-slate-100">
         <div className="urdu-text text-xl font-bold text-slate-700 flex items-center gap-2">
           <span>📝 لیول {levelDisplay} - سوال:</span>
@@ -203,7 +241,6 @@ export default function Quiz({ student, onComplete }: QuizProps) {
         </div>
       </div>
 
-      {/* Main Content Area */}
       <AnimatePresence mode="wait">
         <motion.div
           key={currentIndex}
@@ -213,12 +250,20 @@ export default function Quiz({ student, onComplete }: QuizProps) {
           transition={{ duration: 0.4, type: "spring", bounce: 0.5 }}
           className="w-full flex flex-col items-center"
         >
-          {/* Question Bubble */}
           <div className="relative w-full mb-8 bg-white rounded-[2rem] p-8 md:p-12 shadow-lg border-b-8 border-brand-100 text-center">
-            <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 bg-yellow-400 rounded-full p-4 shadow-md border-4 border-white">
+            <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 bg-yellow-400 rounded-full p-4 shadow-md border-4 border-white flex gap-2 items-center">
               <Lightbulb className="w-8 h-8 text-white fill-white" />
             </div>
             
+            {/* Speaker Button to allow manual trigger if autoplay is blocked */}
+            <button 
+              onClick={() => playVoice(currentQuestion.fullAudioText)}
+              className="absolute top-4 left-4 p-3 bg-brand-50 hover:bg-brand-100 rounded-full text-brand-500 transition-colors shadow-sm"
+              title="آواز سنیں"
+            >
+              <Volume2 className="w-6 h-6" />
+            </button>
+
             <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-slate-800 urdu-text leading-[2.2] tracking-wide mt-4">
               {currentQuestion.sentence.split('_________').map((part: string, i: number, arr: any[]) => (
                 <span key={i}>
@@ -231,7 +276,6 @@ export default function Quiz({ student, onComplete }: QuizProps) {
             </h2>
           </div>
 
-          {/* Options Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 w-full max-w-3xl">
             {currentQuestion.shuffledOptions.map((option: any, index: number) => {
               const baseColor = OPTION_COLORS[index % 4];
@@ -247,10 +291,8 @@ export default function Quiz({ student, onComplete }: QuizProps) {
                   animation = { x: [-8, 8, -8, 8, 0] };
                 }
               } else if (selectedOption !== null && option.isCorrect) {
-                // Highlight correct answer playfully
                 buttonStyle = "bg-green-400 text-white border-green-500 border-b-4 animate-pulse";
               } else if (selectedOption !== null) {
-                // Dim other options
                 buttonStyle = "bg-slate-100 text-slate-400 border-slate-200 border-b-2 opacity-50";
               }
 
@@ -269,7 +311,6 @@ export default function Quiz({ student, onComplete }: QuizProps) {
             })}
           </div>
 
-          {/* Next Button (Not shown on last question) */}
           {selectedOption !== null && currentIndex < questions.length - 1 && (
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
@@ -280,7 +321,7 @@ export default function Quiz({ student, onComplete }: QuizProps) {
                 onClick={handleNext}
                 className="bg-brand-500 hover:bg-brand-600 text-white px-12 py-4 rounded-full text-2xl font-bold urdu-text flex items-center gap-4 transition-all shadow-[0_6px_0_rgb(22,163,74)] hover:translate-y-1 hover:shadow-[0_4px_0_rgb(22,163,74)] active:translate-y-2 active:shadow-none"
               >
-                <span>اگلا سوال</span>
+                <span>{isNextNewLevel ? "اگلا لیول" : "اگلا سوال"}</span>
                 <ArrowLeft className="w-8 h-8 stroke-[3px]" />
               </button>
             </motion.div>

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { Loader2, RefreshCw, Lock } from "lucide-react";
+import { Loader2, RefreshCw, Lock, Trash2, PlusCircle } from "lucide-react";
 
 export default function AdminDashboard() {
   const [passcode, setPasscode] = useState("");
@@ -10,6 +10,7 @@ export default function AdminDashboard() {
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,18 +40,58 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleResetAccess = async (id: string) => {
+  const handleAllowAgain = async (student: any) => {
+    const confirm = window.confirm(`کیا آپ ${student.name} کو دوبارہ کھیلنے کی اجازت دینا چاہتے ہیں؟ (یہ ایک نیا ریکارڈ بنائے گا اور پرانا ریکارڈ بھی محفوظ رہے گا)`);
+    if (!confirm) return;
+
     try {
       const { error } = await supabase
         .from("students")
-        .update({ has_played: false, score: 0, gift: null })
-        .eq("id", id);
+        .insert([{ 
+          name: student.name, 
+          email: student.email, 
+          roll_no: student.roll_no, 
+          has_played: false, 
+          score: 0, 
+          gift: null 
+        }]);
       
       if (error) throw error;
-      fetchStudents(); // Refresh data
+      alert("اجازت دے دی گئی ہے! طالب علم اب اسی ای میل سے دوبارہ لاگ ان کر سکتا ہے۔");
+      fetchStudents();
     } catch (err) {
       console.error(err);
       alert("رسائی دوبارہ ترتیب دینے میں ناکام۔");
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    const confirm1 = window.confirm("کیا آپ واقعی تمام طلباء کا ڈیٹا ڈیلیٹ کرنا چاہتے ہیں؟ یہ عمل واپس نہیں ہو سکتا!");
+    if (!confirm1) return;
+    
+    const confirm2 = window.prompt("اگر آپ واقعی تمام ڈیٹا ڈیلیٹ کرنا چاہتے ہیں تو 'DELETE' لکھیں:");
+    if (confirm2 !== 'DELETE') return;
+
+    setDeleting(true);
+    try {
+      // In Supabase, you must have a filter to delete multiple rows. We filter by score >= 0 which covers everyone.
+      const { error } = await supabase
+        .from("students")
+        .delete()
+        .gte('score', 0);
+      
+      if (error) throw error;
+      
+      // Try deleting null scores as well just in case
+      await supabase.from("students").delete().is('score', null);
+
+      alert("تمام ڈیٹا کامیابی سے ڈیلیٹ کر دیا گیا ہے۔");
+      fetchStudents();
+    } catch (err) {
+      console.error(err);
+      alert("ڈیٹا ڈیلیٹ کرنے میں مسئلہ ہے۔");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -84,17 +125,40 @@ export default function AdminDashboard() {
     );
   }
 
+  // Pre-calculate ranks handling ties
+  let currentRank = 1;
+  let previousScore = -1;
+  const rankedStudents = students.map((student, index) => {
+    if (student.score !== previousScore) {
+      currentRank = index + 1;
+      previousScore = student.score;
+    }
+    return { ...student, rank: currentRank };
+  });
+
   return (
-    <div className="container mx-auto py-8 px-4 max-w-6xl">
-      <div className="flex justify-between items-center mb-8 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+    <div className="container mx-auto py-8 px-4 max-w-7xl">
+      <div className="flex flex-col sm:flex-row justify-between items-center mb-8 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 gap-4">
         <h1 className="text-3xl font-bold text-slate-800 urdu-text">ایڈمن ڈیش بورڈ 👑</h1>
-        <button 
-          onClick={fetchStudents}
-          className="p-3 bg-slate-100 border border-slate-200 rounded-xl hover:bg-slate-200 transition-colors shadow-sm flex items-center gap-2"
-        >
-          <span className="urdu-text font-bold text-slate-700 hidden sm:block">ری فریش</span>
-          <RefreshCw className={`w-5 h-5 text-slate-700 ${loading ? 'animate-spin' : ''}`} />
-        </button>
+        
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={handleDeleteAll}
+            disabled={deleting}
+            className="p-3 bg-red-50 text-red-600 border border-red-200 rounded-xl hover:bg-red-100 transition-colors shadow-sm flex items-center gap-2 touch-target"
+          >
+            <span className="urdu-text font-bold hidden sm:block">سارا ڈیٹا ڈیلیٹ کریں</span>
+            {deleting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
+          </button>
+
+          <button 
+            onClick={fetchStudents}
+            className="p-3 bg-slate-100 border border-slate-200 rounded-xl hover:bg-slate-200 transition-colors shadow-sm flex items-center gap-2 touch-target"
+          >
+            <span className="urdu-text font-bold text-slate-700 hidden sm:block">ری فریش</span>
+            <RefreshCw className={`w-5 h-5 text-slate-700 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
@@ -111,23 +175,23 @@ export default function AdminDashboard() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {students.length === 0 ? (
+              {rankedStudents.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-8 text-center text-slate-500 urdu-text text-lg">
                     کوئی طالب علم موجود نہیں
                   </td>
                 </tr>
               ) : (
-                students.map((student, index) => {
-                  let rankDisplay = (index + 1).toString();
+                rankedStudents.map((student) => {
+                  let rankDisplay = student.rank.toString();
                   let rankClass = "text-slate-600 font-bold";
-                  if (index === 0 && student.score > 0) {
+                  if (student.rank === 1 && student.score > 0) {
                     rankDisplay = "🥇 1st";
                     rankClass = "text-yellow-600 font-black text-lg bg-yellow-50 px-2 py-1 rounded-lg";
-                  } else if (index === 1 && student.score > 0) {
+                  } else if (student.rank === 2 && student.score > 0) {
                     rankDisplay = "🥈 2nd";
                     rankClass = "text-slate-500 font-bold text-lg bg-slate-50 px-2 py-1 rounded-lg";
-                  } else if (index === 2 && student.score > 0) {
+                  } else if (student.rank === 3 && student.score > 0) {
                     rankDisplay = "🥉 3rd";
                     rankClass = "text-amber-700 font-bold text-lg bg-amber-50 px-2 py-1 rounded-lg";
                   }
@@ -141,11 +205,12 @@ export default function AdminDashboard() {
                       <td className="px-6 py-4 text-2xl">{student.gift || '-'}</td>
                       <td className="px-6 py-4 text-left">
                         <button
-                          onClick={() => handleResetAccess(student.id)}
+                          onClick={() => handleAllowAgain(student)}
                           disabled={!student.has_played}
-                          className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-sm transition-colors urdu-text disabled:opacity-50 disabled:cursor-not-allowed touch-target font-bold border border-red-200"
+                          className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg text-sm transition-colors urdu-text disabled:opacity-50 disabled:cursor-not-allowed touch-target font-bold border border-indigo-200 flex items-center gap-2 mr-auto"
                         >
-                          ری سیٹ کریں
+                          <PlusCircle className="w-4 h-4" />
+                          دوبارہ اجازت دیں
                         </button>
                       </td>
                     </tr>
