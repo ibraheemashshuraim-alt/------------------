@@ -27,7 +27,7 @@ export default function AdminDashboard() {
       const { data, error } = await supabase
         .from("students")
         .select("*")
-        .order("created_at", { ascending: false });
+        .order("score", { ascending: false, nullsFirst: false });
       
       if (error) throw error;
       setStudents(data || []);
@@ -43,7 +43,7 @@ export default function AdminDashboard() {
     try {
       const { error } = await supabase
         .from("students")
-        .update({ has_played: false })
+        .update({ has_played: false, score: 0, gift: null })
         .eq("id", id);
       
       if (error) throw error;
@@ -86,57 +86,71 @@ export default function AdminDashboard() {
 
   return (
     <div className="container mx-auto py-8 px-4 max-w-6xl">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold text-slate-800 urdu-text">ایڈمن ڈیش بورڈ</h1>
+      <div className="flex justify-between items-center mb-8 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+        <h1 className="text-3xl font-bold text-slate-800 urdu-text">ایڈمن ڈیش بورڈ 👑</h1>
         <button 
           onClick={fetchStudents}
-          className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors shadow-sm"
+          className="p-3 bg-slate-100 border border-slate-200 rounded-xl hover:bg-slate-200 transition-colors shadow-sm flex items-center gap-2"
         >
-          <RefreshCw className={`w-5 h-5 text-slate-600 ${loading ? 'animate-spin' : ''}`} />
+          <span className="urdu-text font-bold text-slate-700 hidden sm:block">ری فریش</span>
+          <RefreshCw className={`w-5 h-5 text-slate-700 ${loading ? 'animate-spin' : ''}`} />
         </button>
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-right" dir="rtl">
-            <thead className="bg-slate-50 border-b border-slate-200">
+            <thead className="bg-slate-100 border-b border-slate-200">
               <tr>
-                <th className="px-6 py-4 text-slate-600 font-semibold urdu-text">نام</th>
-                <th className="px-6 py-4 text-slate-600 font-semibold urdu-text">رول نمبر</th>
-                <th className="px-6 py-4 text-slate-600 font-semibold urdu-text">اسکور</th>
-                <th className="px-6 py-4 text-slate-600 font-semibold urdu-text">سٹیٹس</th>
-                <th className="px-6 py-4 text-slate-600 font-semibold urdu-text text-left">ایکشن</th>
+                <th className="px-6 py-4 text-slate-700 font-bold urdu-text">پوزیشن</th>
+                <th className="px-6 py-4 text-slate-700 font-bold urdu-text">نام</th>
+                <th className="px-6 py-4 text-slate-700 font-bold urdu-text">ای میل</th>
+                <th className="px-6 py-4 text-slate-700 font-bold urdu-text">اسکور</th>
+                <th className="px-6 py-4 text-slate-700 font-bold urdu-text">گفٹ</th>
+                <th className="px-6 py-4 text-slate-700 font-bold urdu-text text-left">ایکشن</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200">
+            <tbody className="divide-y divide-slate-100">
               {students.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-slate-500 urdu-text">
+                  <td colSpan={6} className="px-6 py-8 text-center text-slate-500 urdu-text text-lg">
                     کوئی طالب علم موجود نہیں
                   </td>
                 </tr>
               ) : (
-                students.map((student) => (
-                  <tr key={student.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4 font-medium text-slate-800 urdu-text">{student.name}</td>
-                    <td className="px-6 py-4 text-slate-600 font-sans" dir="ltr">{student.roll_no}</td>
-                    <td className="px-6 py-4 font-bold text-brand-600 font-sans">{student.score}</td>
-                    <td className="px-6 py-4">
-                      <span className={`px-3 py-1 rounded-full text-sm font-medium urdu-text ${student.has_played ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                        {student.has_played ? 'کھیل چکے' : 'باقی ہے'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-left">
-                      <button
-                        onClick={() => handleResetAccess(student.id)}
-                        disabled={!student.has_played}
-                        className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm transition-colors urdu-text disabled:opacity-50 disabled:cursor-not-allowed touch-target"
-                      >
-                        دوبارہ اجازت دیں
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                students.map((student, index) => {
+                  let rankDisplay = (index + 1).toString();
+                  let rankClass = "text-slate-600 font-bold";
+                  if (index === 0 && student.score > 0) {
+                    rankDisplay = "🥇 1st";
+                    rankClass = "text-yellow-600 font-black text-lg bg-yellow-50 px-2 py-1 rounded-lg";
+                  } else if (index === 1 && student.score > 0) {
+                    rankDisplay = "🥈 2nd";
+                    rankClass = "text-slate-500 font-bold text-lg bg-slate-50 px-2 py-1 rounded-lg";
+                  } else if (index === 2 && student.score > 0) {
+                    rankDisplay = "🥉 3rd";
+                    rankClass = "text-amber-700 font-bold text-lg bg-amber-50 px-2 py-1 rounded-lg";
+                  }
+
+                  return (
+                    <tr key={student.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-6 py-4" dir="ltr"><span className={rankClass}>{rankDisplay}</span></td>
+                      <td className="px-6 py-4 font-bold text-slate-800 urdu-text text-lg">{student.name}</td>
+                      <td className="px-6 py-4 text-slate-500 font-sans text-sm" dir="ltr">{student.email || student.roll_no}</td>
+                      <td className="px-6 py-4 font-black text-brand-600 font-sans text-xl">{student.score || 0}</td>
+                      <td className="px-6 py-4 text-2xl">{student.gift || '-'}</td>
+                      <td className="px-6 py-4 text-left">
+                        <button
+                          onClick={() => handleResetAccess(student.id)}
+                          disabled={!student.has_played}
+                          className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-sm transition-colors urdu-text disabled:opacity-50 disabled:cursor-not-allowed touch-target font-bold border border-red-200"
+                        >
+                          ری سیٹ کریں
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

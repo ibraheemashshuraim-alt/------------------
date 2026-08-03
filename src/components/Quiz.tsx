@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import idiomsData from "@/data/idioms.json";
-import { Loader2, ArrowLeft, Lightbulb, PartyPopper } from "lucide-react";
+import { Loader2, ArrowLeft, Lightbulb, Trophy } from "lucide-react";
 
 interface QuizProps {
   student: any;
@@ -25,13 +25,21 @@ export default function Quiz({ student, onComplete }: QuizProps) {
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
+  const [showLevelIntro, setShowLevelIntro] = useState(true);
+  const [currentLevel, setCurrentLevel] = useState(1);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    // Shuffle and pick 10 questions
-    const shuffled = [...idiomsData].sort(() => Math.random() - 0.5).slice(0, 10);
+    // Separate idioms by difficulty
+    const easy = idiomsData.filter(i => i.difficulty === 'easy').sort(() => Math.random() - 0.5).slice(0, 10);
+    const normal = idiomsData.filter(i => i.difficulty === 'normal').sort(() => Math.random() - 0.5).slice(0, 10);
+    const hard = idiomsData.filter(i => i.difficulty === 'hard').sort(() => Math.random() - 0.5).slice(0, 10);
     
-    // Shuffle options for each question so correct answer is not always first
-    const processedQuestions = shuffled.map((q) => {
+    // Combine 30 questions
+    const combined = [...easy, ...normal, ...hard];
+    
+    // Shuffle options for each question
+    const processedQuestions = combined.map((q) => {
       const optionsMapped = q.options.map((opt: string, idx: number) => ({
         text: opt,
         isCorrect: idx === q.correctIndex
@@ -41,16 +49,29 @@ export default function Quiz({ student, onComplete }: QuizProps) {
     });
 
     setQuestions(processedQuestions);
+    
+    // Auto-hide level 1 intro after 2.5 seconds
+    const timer = setTimeout(() => {
+      setShowLevelIntro(false);
+    }, 2500);
+    return () => clearTimeout(timer);
   }, []);
 
   const playVoice = (text: string) => {
     try {
-      // Using gtx client which is highly reliable for Google Translate TTS
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
       const url = `https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=ur&q=${encodeURIComponent(text)}`;
       const audio = new Audio(url);
-      audio.play().catch((e) => {
-        console.error("Audio playback failed:", e);
-      });
+      audioRef.current = audio;
+      
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(error => {
+          console.error("Audio playback blocked by browser. Please interact with the document first.", error);
+        });
+      }
     } catch (e) {
       console.error("Voice Error:", e);
     }
@@ -64,36 +85,62 @@ export default function Quiz({ student, onComplete }: QuizProps) {
     const correct = question.shuffledOptions[index].isCorrect;
     setIsCorrect(correct);
 
+    const newScore = score + (correct ? 1 : 0);
     if (correct) {
-      setScore((prev) => prev + 1);
+      setScore(newScore);
       playVoice(question.fullAudioText);
     } else {
       playVoice("غلط جواب");
     }
+
+    // If it's the very last question, don't wait for "Next" button. Wait a bit then finish.
+    if (currentIndex === questions.length - 1) {
+      setSaving(true);
+      
+      let gift = "🎈";
+      if (newScore === questions.length) gift = "👑";
+      else if (newScore >= 20) gift = "🥈";
+      else if (newScore >= 10) gift = "🥉";
+
+      setTimeout(async () => {
+        try {
+          await supabase
+            .from("students")
+            .update({ 
+              score: newScore, 
+              gift: gift,
+              has_played: true 
+            })
+            .eq("id", student.id);
+          
+          onComplete(newScore, questions.length);
+        } catch (err) {
+          console.error("Failed to save score:", err);
+          setSaving(false);
+        }
+      }, 2500); // wait for audio to finish playing
+    }
   };
 
   const handleNext = async () => {
+    // Next button is not shown on the last question anyway
     if (currentIndex < questions.length - 1) {
-      setCurrentIndex((prev) => prev + 1);
+      const nextIndex = currentIndex + 1;
+      
+      // Check if entering a new level (every 10 questions)
+      if (nextIndex === 10) {
+        setCurrentLevel(2);
+        setShowLevelIntro(true);
+        setTimeout(() => setShowLevelIntro(false), 2500);
+      } else if (nextIndex === 20) {
+        setCurrentLevel(3);
+        setShowLevelIntro(true);
+        setTimeout(() => setShowLevelIntro(false), 2500);
+      }
+      
+      setCurrentIndex(nextIndex);
       setSelectedOption(null);
       setIsCorrect(null);
-    } else {
-      setSaving(true);
-      try {
-        await supabase
-          .from("students")
-          .update({ 
-            score: score, 
-            has_played: true 
-          })
-          .eq("id", student.id);
-        
-        onComplete(score, questions.length);
-      } catch (err) {
-        console.error("Failed to save score:", err);
-      } finally {
-        setSaving(false);
-      }
     }
   };
 
@@ -102,13 +149,44 @@ export default function Quiz({ student, onComplete }: QuizProps) {
       <div className="flex items-center justify-center min-h-[70vh]">
         <div className="bg-white/90 rounded-3xl p-10 flex flex-col items-center border-b-8 border-brand-300 shadow-xl">
           <Loader2 className="w-16 h-16 animate-spin text-brand-500 mb-6" />
-          <p className="urdu-text text-2xl text-slate-700 font-bold">تیار ہو جائیں! 🚀</p>
+          <p className="urdu-text text-2xl text-slate-700 font-bold">
+            {saving ? "نتیجہ تیار ہو رہا ہے..." : "تیار ہو جائیں! 🚀"}
+          </p>
         </div>
       </div>
     );
   }
 
+  if (showLevelIntro) {
+    let levelName = "آسان";
+    let levelIcon = "🌟";
+    if (currentLevel === 2) {
+      levelName = "درمیانہ";
+      levelIcon = "🔥";
+    } else if (currentLevel === 3) {
+      levelName = "مشکل";
+      levelIcon = "🧠";
+    }
+
+    return (
+      <div className="flex items-center justify-center min-h-[80vh]">
+        <motion.div 
+          initial={{ scale: 0.5, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 1.5, opacity: 0 }}
+          className="bg-white/90 rounded-[3rem] p-16 flex flex-col items-center border-b-8 border-indigo-400 shadow-2xl"
+        >
+          <div className="text-7xl mb-6">{levelIcon}</div>
+          <h2 className="urdu-text text-5xl font-bold text-indigo-600 mb-4">لیول {currentLevel}</h2>
+          <p className="urdu-text text-3xl text-slate-600 font-bold">{levelName}</p>
+        </motion.div>
+      </div>
+    );
+  }
+
   const currentQuestion = questions[currentIndex];
+  // Determine current level display for header
+  const levelDisplay = currentIndex < 10 ? 1 : currentIndex < 20 ? 2 : 3;
 
   return (
     <div className="max-w-4xl mx-auto p-2 md:p-4 flex flex-col items-center justify-center min-h-[85vh] overflow-hidden">
@@ -116,7 +194,7 @@ export default function Quiz({ student, onComplete }: QuizProps) {
       {/* Header */}
       <div className="w-full flex justify-between items-center bg-white/95 rounded-full px-6 py-3 mb-6 shadow-md border border-slate-100">
         <div className="urdu-text text-xl font-bold text-slate-700 flex items-center gap-2">
-          <span>📝 سوال:</span>
+          <span>📝 لیول {levelDisplay} - سوال:</span>
           <span className="bg-slate-100 px-3 py-1 rounded-full text-slate-800">{currentIndex + 1} / {questions.length}</span>
         </div>
         <div className="urdu-text text-xl font-bold text-amber-500 flex items-center gap-2">
@@ -191,8 +269,8 @@ export default function Quiz({ student, onComplete }: QuizProps) {
             })}
           </div>
 
-          {/* Next Button */}
-          {selectedOption !== null && (
+          {/* Next Button (Not shown on last question) */}
+          {selectedOption !== null && currentIndex < questions.length - 1 && (
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}

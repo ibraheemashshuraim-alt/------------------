@@ -11,15 +11,15 @@ interface EntryScreenProps {
 
 export default function EntryScreen({ onStart }: EntryScreenProps) {
   const [name, setName] = useState("");
-  const [rollNo, setRollNo] = useState("");
+  const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [blocked, setBlocked] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !rollNo.trim()) {
-      setError("براہ کرم اپنا نام اور رول نمبر درج کریں۔");
+    if (!name.trim() || !email.trim()) {
+      setError("براہ کرم اپنا نام اور ای میل ایڈریس درج کریں۔");
       return;
     }
 
@@ -31,7 +31,7 @@ export default function EntryScreen({ onStart }: EntryScreenProps) {
       const { data: existingStudent, error: fetchError } = await supabase
         .from("students")
         .select("*")
-        .eq("roll_no", rollNo)
+        .eq("email", email.trim().toLowerCase())
         .single();
 
       if (fetchError && fetchError.code !== "PGRST116") { // PGRST116 is "Not Found"
@@ -57,7 +57,7 @@ export default function EntryScreen({ onStart }: EntryScreenProps) {
         // Create new student
         const { data, error: insertError } = await supabase
           .from("students")
-          .insert([{ name, roll_no: rollNo }])
+          .insert([{ name, email: email.trim().toLowerCase() }])
           .select()
           .single();
 
@@ -122,13 +122,13 @@ export default function EntryScreen({ onStart }: EntryScreenProps) {
             />
           </div>
           <div>
-            <label className="block text-slate-700 mb-2 urdu-text text-lg">رول نمبر / آئی ڈی</label>
+            <label className="block text-slate-700 mb-2 urdu-text text-lg">ای میل ایڈریس</label>
             <input
-              type="text"
-              value={rollNo}
-              onChange={(e) => setRollNo(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all urdu-text text-lg bg-white/50 touch-target"
-              placeholder="اپنا رول نمبر لکھیں"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all text-lg bg-white/50 touch-target font-sans"
+              placeholder="example@student.com"
               dir="ltr"
             />
           </div>
