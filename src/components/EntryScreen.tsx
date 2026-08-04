@@ -102,11 +102,11 @@ export default function EntryScreen({ onStart }: EntryScreenProps) {
         animate={{ y: 0, opacity: 1 }}
         className="glass-card p-8 max-w-md w-full"
       >
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-brand-600 mb-2 urdu-text leading-relaxed">
-            محاورات کی دنیا
+        <div className="text-center mb-10">
+          <h1 className="text-5xl md:text-6xl font-black text-brand-600 mb-4 urdu-text leading-tight drop-shadow-sm">
+            محاورات و ضرب الامثال
           </h1>
-          <p className="text-slate-600 urdu-text text-lg">
+          <p className="text-2xl text-slate-600 urdu-text font-bold">
             اردو محاورات کا دلچسپ کھیل
           </p>
         </div>

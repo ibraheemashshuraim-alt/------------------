@@ -11,14 +11,33 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [showPasswordChange, setShowPasswordChange] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (passcode === process.env.NEXT_PUBLIC_ADMIN_PASSCODE || passcode === "admin123") {
-      setIsAuthenticated(true);
-      fetchStudents();
-    } else {
-      setError("غلط پاس ورڈ");
+    setLoading(true);
+    try {
+      // Check for custom password in db
+      const { data } = await supabase
+        .from("students")
+        .select("name")
+        .eq("email", "admin@admin.com")
+        .maybeSingle();
+      
+      const currentPasscode = data ? data.name : (process.env.NEXT_PUBLIC_ADMIN_PASSCODE || "admin123");
+
+      if (passcode === currentPasscode || passcode === "admin123") {
+        setIsAuthenticated(true);
+        fetchStudents();
+      } else {
+        setError("غلط پاس ورڈ");
+      }
+    } catch (err) {
+      setError("لاگ ان میں مسئلہ ہے۔");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -28,6 +47,7 @@ export default function AdminDashboard() {
       const { data, error } = await supabase
         .from("students")
         .select("*")
+        .gte("score", 0)
         .order("score", { ascending: false, nullsFirst: false });
       
       if (error) throw error;
@@ -37,6 +57,34 @@ export default function AdminDashboard() {
       setError("ڈیٹا لانے میں مسئلہ ہے۔");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPassword || newPassword.length < 6) {
+      alert("نیا پاس ورڈ کم از کم 6 حروف کا ہونا چاہیے۔");
+      return;
+    }
+    
+    setIsChangingPassword(true);
+    try {
+      const { data } = await supabase.from("students").select("id").eq("email", "admin@admin.com").maybeSingle();
+      
+      if (data) {
+        await supabase.from("students").update({ name: newPassword }).eq("id", data.id);
+      } else {
+        await supabase.from("students").insert([{ name: newPassword, email: "admin@admin.com", score: -1, roll_no: "admin", gift: null }]);
+      }
+      
+      alert("پاس ورڈ کامیابی سے تبدیل ہو گیا ہے۔");
+      setShowPasswordChange(false);
+      setNewPassword("");
+    } catch (err) {
+      console.error(err);
+      alert("پاس ورڈ تبدیل کرنے میں مسئلہ ہے۔");
+    } finally {
+      setIsChangingPassword(false);
     }
   };
 
@@ -157,7 +205,15 @@ export default function AdminDashboard() {
       <div className="flex flex-col sm:flex-row justify-between items-center mb-8 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 gap-4">
         <h1 className="text-3xl font-bold text-slate-800 urdu-text">ایڈمن ڈیش بورڈ 👑</h1>
         
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap justify-center">
+          <button 
+            onClick={() => setShowPasswordChange(!showPasswordChange)}
+            className="p-3 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl hover:bg-blue-100 transition-colors shadow-sm flex items-center gap-2 touch-target"
+          >
+            <span className="urdu-text font-bold hidden sm:block">پاس ورڈ تبدیل کریں</span>
+            <Lock className="w-5 h-5" />
+          </button>
+          
           <button 
             onClick={handleDeleteAll}
             disabled={deleting}
@@ -176,6 +232,30 @@ export default function AdminDashboard() {
           </button>
         </div>
       </div>
+
+      {showPasswordChange && (
+        <div className="mb-8 bg-white p-6 rounded-2xl shadow-sm border border-blue-200 flex flex-col items-center">
+          <h2 className="text-xl font-bold text-slate-800 urdu-text mb-4">نیا پاس ورڈ سیٹ کریں</h2>
+          <form onSubmit={handleChangePassword} className="w-full max-w-sm flex gap-3">
+            <input
+              type="text"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              className="flex-1 px-4 py-2 rounded-xl border border-slate-300 focus:ring-2 focus:ring-brand-500 outline-none text-center ltr"
+              placeholder="New Password"
+              required
+              minLength={6}
+            />
+            <button
+              type="submit"
+              disabled={isChangingPassword}
+              className="px-6 py-2 bg-blue-600 text-white rounded-xl font-bold urdu-text hover:bg-blue-700 transition-colors disabled:opacity-50"
+            >
+              {isChangingPassword ? <Loader2 className="w-5 h-5 animate-spin" /> : "محفوظ کریں"}
+            </button>
+          </form>
+        </div>
+      )}
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
