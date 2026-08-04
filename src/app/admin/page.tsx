@@ -15,20 +15,22 @@ export default function AdminDashboard() {
   const [newPassword, setNewPassword] = useState("");
   const [isChangingPassword, setIsChangingPassword] = useState(false);
 
+  const [isChangingPasswordMode, setIsChangingPasswordMode] = useState(false);
+  const [currentPasscode, setCurrentPasscode] = useState("");
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
-      // Check for custom password in db
       const { data } = await supabase
         .from("students")
         .select("name")
         .eq("email", "admin@admin.com")
         .maybeSingle();
       
-      const currentPasscode = data ? data.name : (process.env.NEXT_PUBLIC_ADMIN_PASSCODE || "admin123");
+      const dbPasscode = data ? data.name : (process.env.NEXT_PUBLIC_ADMIN_PASSCODE || "admin123");
 
-      if (passcode === currentPasscode || passcode === "admin123") {
+      if (passcode === dbPasscode || passcode === "admin123") {
         setIsAuthenticated(true);
         fetchStudents();
       } else {
@@ -36,25 +38,6 @@ export default function AdminDashboard() {
       }
     } catch (err) {
       setError("لاگ ان میں مسئلہ ہے۔");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchStudents = async () => {
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from("students")
-        .select("*")
-        .gte("score", 0)
-        .order("score", { ascending: false, nullsFirst: false });
-      
-      if (error) throw error;
-      setStudents(data || []);
-    } catch (err) {
-      console.error(err);
-      setError("ڈیٹا لانے میں مسئلہ ہے۔");
     } finally {
       setLoading(false);
     }
@@ -69,17 +52,27 @@ export default function AdminDashboard() {
     
     setIsChangingPassword(true);
     try {
-      const { data } = await supabase.from("students").select("id").eq("email", "admin@admin.com").maybeSingle();
+      // Verify current password first
+      const { data: adminData } = await supabase.from("students").select("id, name").eq("email", "admin@admin.com").maybeSingle();
+      const actualCurrentPasscode = adminData ? adminData.name : (process.env.NEXT_PUBLIC_ADMIN_PASSCODE || "admin123");
       
-      if (data) {
-        await supabase.from("students").update({ name: newPassword }).eq("id", data.id);
+      if (currentPasscode !== actualCurrentPasscode && currentPasscode !== "admin123") {
+        alert("موجودہ پاس ورڈ غلط ہے۔");
+        setIsChangingPassword(false);
+        return;
+      }
+      
+      if (adminData) {
+        await supabase.from("students").update({ name: newPassword }).eq("id", adminData.id);
       } else {
         await supabase.from("students").insert([{ name: newPassword, email: "admin@admin.com", score: -1, roll_no: "admin", gift: null }]);
       }
       
-      alert("پاس ورڈ کامیابی سے تبدیل ہو گیا ہے۔");
-      setShowPasswordChange(false);
+      alert("پاس ورڈ کامیابی سے تبدیل ہو گیا ہے۔ اب آپ نئے پاس ورڈ سے لاگ ان کر سکتے ہیں۔");
+      setIsChangingPasswordMode(false);
       setNewPassword("");
+      setCurrentPasscode("");
+      setPasscode("");
     } catch (err) {
       console.error(err);
       alert("پاس ورڈ تبدیل کرنے میں مسئلہ ہے۔");
@@ -166,24 +159,72 @@ export default function AdminDashboard() {
           <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-6">
             <Lock className="w-8 h-8 text-slate-600" />
           </div>
-          <h2 className="text-2xl font-bold text-slate-800 mb-6 urdu-text">ایڈمن ڈیش بورڈ</h2>
+          <h2 className="text-2xl font-bold text-slate-800 mb-6 urdu-text">
+            {isChangingPasswordMode ? "پاس ورڈ تبدیل کریں" : "ایڈمن ڈیش بورڈ"}
+          </h2>
           
-          <form onSubmit={handleLogin} className="space-y-4">
-            <input
-              type="password"
-              value={passcode}
-              onChange={(e) => setPasscode(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-brand-500 outline-none text-center ltr touch-target"
-              placeholder="Enter Passcode"
-            />
-            {error && <p className="text-red-500 text-sm urdu-text">{error}</p>}
-            <button
-              type="submit"
-              className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 rounded-xl transition-all touch-target urdu-text text-lg"
-            >
-              لاگ ان کریں
-            </button>
-          </form>
+          {!isChangingPasswordMode ? (
+            <form onSubmit={handleLogin} className="space-y-4">
+              <input
+                type="password"
+                value={passcode}
+                onChange={(e) => setPasscode(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-brand-500 outline-none text-center ltr touch-target"
+                placeholder="Enter Passcode"
+              />
+              {error && <p className="text-red-500 text-sm urdu-text">{error}</p>}
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 rounded-xl transition-all touch-target urdu-text text-lg flex justify-center items-center gap-2"
+              >
+                {loading && <Loader2 className="w-5 h-5 animate-spin" />}
+                لاگ ان کریں
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsChangingPasswordMode(true)}
+                className="w-full text-slate-500 hover:text-slate-700 text-sm font-bold urdu-text mt-4 transition-colors"
+              >
+                پاس ورڈ تبدیل کریں؟
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleChangePassword} className="space-y-4">
+              <input
+                type="password"
+                value={currentPasscode}
+                onChange={(e) => setCurrentPasscode(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-brand-500 outline-none text-center ltr touch-target"
+                placeholder="موجودہ پاس ورڈ (Current Password)"
+                required
+              />
+              <input
+                type="text"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-brand-500 outline-none text-center ltr touch-target"
+                placeholder="نیا پاس ورڈ (New Password)"
+                required
+                minLength={6}
+              />
+              <button
+                type="submit"
+                disabled={isChangingPassword}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition-all touch-target urdu-text text-lg flex justify-center items-center gap-2"
+              >
+                {isChangingPassword && <Loader2 className="w-5 h-5 animate-spin" />}
+                محفوظ کریں
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsChangingPasswordMode(false)}
+                className="w-full text-slate-500 hover:text-slate-700 text-sm font-bold urdu-text mt-4 transition-colors"
+              >
+                واپس لاگ ان پر جائیں
+              </button>
+            </form>
+          )}
         </div>
       </div>
     );
@@ -207,14 +248,6 @@ export default function AdminDashboard() {
         
         <div className="flex items-center gap-3 flex-wrap justify-center">
           <button 
-            onClick={() => setShowPasswordChange(!showPasswordChange)}
-            className="p-3 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl hover:bg-blue-100 transition-colors shadow-sm flex items-center gap-2 touch-target"
-          >
-            <span className="urdu-text font-bold hidden sm:block">پاس ورڈ تبدیل کریں</span>
-            <Lock className="w-5 h-5" />
-          </button>
-          
-          <button 
             onClick={handleDeleteAll}
             disabled={deleting}
             className="p-3 bg-red-50 text-red-600 border border-red-200 rounded-xl hover:bg-red-100 transition-colors shadow-sm flex items-center gap-2 touch-target"
@@ -232,30 +265,6 @@ export default function AdminDashboard() {
           </button>
         </div>
       </div>
-
-      {showPasswordChange && (
-        <div className="mb-8 bg-white p-6 rounded-2xl shadow-sm border border-blue-200 flex flex-col items-center">
-          <h2 className="text-xl font-bold text-slate-800 urdu-text mb-4">نیا پاس ورڈ سیٹ کریں</h2>
-          <form onSubmit={handleChangePassword} className="w-full max-w-sm flex gap-3">
-            <input
-              type="text"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              className="flex-1 px-4 py-2 rounded-xl border border-slate-300 focus:ring-2 focus:ring-brand-500 outline-none text-center ltr"
-              placeholder="New Password"
-              required
-              minLength={6}
-            />
-            <button
-              type="submit"
-              disabled={isChangingPassword}
-              className="px-6 py-2 bg-blue-600 text-white rounded-xl font-bold urdu-text hover:bg-blue-700 transition-colors disabled:opacity-50"
-            >
-              {isChangingPassword ? <Loader2 className="w-5 h-5 animate-spin" /> : "محفوظ کریں"}
-            </button>
-          </form>
-        </div>
-      )}
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
