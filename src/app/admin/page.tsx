@@ -43,6 +43,25 @@ export default function AdminDashboard() {
     }
   };
 
+  const fetchStudents = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("students")
+        .select("*")
+        .gte("score", 0)
+        .order("score", { ascending: false, nullsFirst: false });
+      
+      if (error) throw error;
+      setStudents(data || []);
+    } catch (err) {
+      console.error(err);
+      setError("ڈیٹا لانے میں مسئلہ ہے۔");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPassword || newPassword.length < 6) {
